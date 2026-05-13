@@ -1,0 +1,82 @@
+<!DOCTYPE html>
+<html lang="es">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Resultados en Vivo - Kennel Club Santa Fe</title>
+    <meta name="description"
+        content="Resultados en vivo de exposiciones caninas del Kennel Club Santa Fe. Consulta clasificaciones de razas, grupos y Best in Show.">
+    <link rel="stylesheet" href="styles.css">
+</head>
+
+<body>
+
+    <header class="site-header">
+        <div class="brand">
+            <img src="https://i.postimg.cc/Qtb1By5N/Logo-Kennel.jpg" alt="Kennel Club Santa Fe" class="club-logo">
+            <div>
+                <h2>Kennel Club Santa Fe</h2>
+                <h1>Resultados en Vivo</h1>
+                <p>Exposiciones de Estructura y Belleza</p>
+            </div>
+        </div>
+
+        <div class="live-indicator">
+            <span class="dot"></span> EN VIVO
+        </div>
+    </header>
+
+    <main>
+        <!-- Selector y Controles -->
+        <div class="controls">
+            <div class="field-group">
+                <label for="eventSelector">Seleccionar Exposición</label>
+                <select id="eventSelector">
+                    <option value="">Cargando eventos...</option>
+                </select>
+            </div>
+
+            <div class="actions">
+                <button id="updateBtn" class="btn-primary">Actualizar resultados</button>
+                <div id="updateStatus" class="update-status">Iniciando...</div>
+            </div>
+        </div>
+
+        <!-- Resumen del Evento -->
+        <div id="eventSummaryContainer"></div>
+
+        <!-- Sección Pistas / Jueces -->
+        <section class="section-pistas">
+            <h2 class="section-title">Pistas y Jueces</h2>
+            <div id="pistasContainer" class="tracks-grid"></div>
+        </section>
+
+        <!-- Sección Resultados Razas -->
+        <section class="section-razas">
+            <h2 class="section-title">Resultados de Razas</h2>
+            <div id="razasContainer"></div>
+        </section>
+
+        <!-- Sección Resultados Grupos -->
+        <section class="section-grupos">
+            <h2 class="section-title">Resultados de Grupos</h2>
+            <div id="gruposContainer"></div>
+        </section>
+
+        <!-- Sección Resultados BIS -->
+        <section class="section-bis">
+            <h2 class="section-title">Finales BIS</h2>
+            <div id="bisContainer"></div>
+        </section>
+    </main>
+
+    <footer>
+        <p>Diseñado por Dr. Eduardo R. Henquín</p>
+        <p><a href="https://ehenquin.github.io/LinkTreePro/" target="_blank">Visitar LinkTreePro</a></p>
+    </footer>
+
+    <script type="module" src="public.js"></script>
+</body>
+
+</html>
