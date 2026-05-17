@@ -68,6 +68,9 @@ function formatDateAR(value) {
     return s;
 }
 
+
+
+
 const formatTime = (date) => {
     if (!date) return "--:--:--";
     return date.toLocaleTimeString("es-AR", {
@@ -77,6 +80,27 @@ const formatTime = (date) => {
         hour12: false
     });
 };
+
+function getJudgePhotoUrl(judge) {
+    const raw = String(judge?.FotoURL || "").trim();
+    if (!raw) return "";
+
+    if (raw.includes("|")) {
+        return raw.split("|").pop().trim();
+    }
+
+    return raw;
+}
+
+
+
+
+
+
+
+
+
+
 
 // --- DATA LOADING ---
 
@@ -232,11 +256,17 @@ function renderEventSummary() {
     `;
 }
 
+
+
+
+
 function renderPistas() {
     const container = document.getElementById('pistasContainer');
     if (!container) return;
 
-    const pistas = (STATE.data?.Gestion_pistas || []).filter(p => normalizeID(p.IDEvento) === STATE.selectedEventId);
+    const pistas = (STATE.data?.Gestion_pistas || []).filter(p =>
+        normalizeID(p.IDEvento) === STATE.selectedEventId
+    );
 
     if (pistas.length === 0) {
         container.innerHTML = `<div class="empty-state">No hay pistas asignadas para este evento.</div>`;
@@ -244,42 +274,65 @@ function renderPistas() {
     }
 
     const grouped = {};
+
     pistas.forEach(p => {
         const key = `${p.IDPista}_${p.IDJuez}`;
+
         if (!grouped[key]) {
             const judge = byId(STATE.data?.Jueces, 'IDJuez', p.IDJuez);
+
             grouped[key] = {
                 idPista: normalizeID(p.IDPista),
                 idJuez: normalizeID(p.IDJuez),
                 juez: judge ? judge.NombreJuez : "Juez no asignado",
+                fotoUrl: getJudgePhotoUrl(judge),
                 grupos: new Set()
             };
         }
+
         if (p.IDGrupo) grouped[key].grupos.add(normalizeGrupo(p.IDGrupo));
     });
 
     container.innerHTML = Object.values(grouped).map(track => {
-        const isTrackActive = (STATE.selectedPistaId === track.idPista && STATE.selectedJudgeId === track.idJuez);
+        const isTrackActive = (
+            STATE.selectedPistaId === track.idPista &&
+            STATE.selectedJudgeId === track.idJuez
+        );
+
         return `
             <div class="track-card ${isTrackActive ? 'active' : ''}" 
                  onclick="window.selectTrack('${track.idPista}', '${track.idJuez}')">
+
                 <div class="track-number">Pista ${track.idPista}</div>
+
                 <div class="track-judge">${track.juez}</div>
+
+                <div class="track-judge-photo-wrap">
+                    ${track.fotoUrl
+                ? `<img src="${track.fotoUrl}" alt="Foto de ${track.juez}" class="track-judge-photo" loading="lazy">`
+                : `<div class="track-judge-photo-placeholder">👤</div>`
+            }
+                </div>
+
                 <div class="track-groups">
                     ${Array.from(track.grupos).sort().map(g => {
-            const isGroupActive = isTrackActive && STATE.selectedGroupIds.includes(g);
-            return `
+                const isGroupActive = isTrackActive && STATE.selectedGroupIds.includes(g);
+
+                return `
                             <span class="group-tag clickable ${isGroupActive ? 'active' : ''}" 
                                   onclick="window.selectGroupToggle(event, '${track.idPista}', '${track.idJuez}', '${g}')">
                                 ${g}
                             </span>
                         `;
-        }).join('')}
+            }).join('')}
                 </div>
             </div>
         `;
     }).join('');
 }
+
+
+
 
 function renderResultViewSelector() {
     let navContainer = document.getElementById('navigationControls');
@@ -336,7 +389,7 @@ function renderResultadosRazas() {
         if (normalizeID(r.IDJuez) !== STATE.selectedJudgeId) return false;
 
         // Show if it has a placement, qualification, title OR is absent
-        if (!(r.Puesto || r.Calificacion || r.Titulo_Ganado || isTruthy(r.Ausente))) return false;
+        if (!(r.Puesto || r.Calificacion || r.Titulo_Ganado || r.Titulo || r.TituloGanado || r.Titulos || isTruthy(r.Ausente))) return false;
 
         const dog = byId(STATE.data?.Catalogo_Perros_Inscriptos, 'IDInscripcion', r.IDInscripcion);
         return dog && selectedGroups.includes(normalizeGrupo(dog.IDGrupo));
@@ -398,13 +451,7 @@ function renderResultadosRazas() {
                     return (parseInt(a.Puesto) || 99) - (parseInt(b.Puesto) || 99);
                 }).forEach(d => {
                     const isAus = isTruthy(d.Ausente);
-                    let placeClass = 'place-other';
-                    if (!isAus) {
-                        if (d.Puesto == 1) placeClass = 'place-1';
-                        else if (d.Puesto == 2) placeClass = 'place-2';
-                        else if (d.Puesto == 3) placeClass = 'place-3';
-                        else if (d.Puesto == 4) placeClass = 'place-4';
-                    }
+                    const tituloGanado = d.Titulo_Ganado || d.Titulo || d.TituloGanado || d.Titulos || "";
 
                     html += `
                         <div class="result-item ${isAus ? 'ausente-item' : ''}">
@@ -414,16 +461,22 @@ function renderResultadosRazas() {
                                 <div class="dog-meta">
                                     <strong>Identificación:</strong> ${d.dog.Observaciones || 'Sin datos'}
                                 </div>
+                                ${tituloGanado ? `
+                                <div class="public-title-row">
+                                  <span class="public-title-label">Título:</span>
+                                  <span class="public-title-badge">${tituloGanado}</span>
+                                </div>
+                                ` : ""}
                                 <div class="result-labels">
                                     ${d.Calificacion ? `<span class="label label-qualification">${d.Calificacion}</span>` : ''}
-                                    ${d.Titulo_Ganado ? `<span class="label label-title">${d.Titulo_Ganado}</span>` : ''}
                                 </div>
                                 <div class="public-indicators">
                                     <div class="public-indicator-btn btn-aus ${isAus ? 'active' : ''}">AUS</div>
-                                    <div class="public-indicator-btn btn-1 ${d.Puesto == 1 && !isAus ? 'active' : ''}">1º</div>
-                                    <div class="public-indicator-btn btn-2 ${d.Puesto == 2 && !isAus ? 'active' : ''}">2º</div>
-                                    <div class="public-indicator-btn btn-3 ${d.Puesto == 3 && !isAus ? 'active' : ''}">3º</div>
-                                    <div class="public-indicator-btn btn-4 ${d.Puesto == 4 && !isAus ? 'active' : ''}">4º</div>
+                                    ${["1", "2", "3", "4", "5", "6", "7"].map(pst => `
+                                      <div class="public-indicator-btn btn-${pst} ${String(d.Puesto) === pst && !isAus ? 'active' : ''}">
+                                        ${pst}º
+                                      </div>
+                                    `).join("")}
                                 </div>
                             </div>
                         </div>
@@ -438,6 +491,7 @@ function renderResultadosRazas() {
     });
     container.innerHTML = html;
 }
+
 
 function renderResultadosGrupos() {
     const container = document.getElementById('gruposContainer');
@@ -456,6 +510,8 @@ function renderResultadosGrupos() {
         selectedGroups.includes(normalizeGrupo(r.IDGrupo)) &&
         (r.PuestoGrupo || isTruthy(r.Ausente))
     );
+
+    const resRazas = STATE.data?.Resultados_Razas || [];
 
     if (results.length === 0) {
         container.innerHTML = `<div class="empty-state">No hay resultados oficiales publicados para esta selección todavía.</div>`;
@@ -510,6 +566,19 @@ function renderResultadosGrupos() {
                     const p = item.res.PuestoGrupo || "";
                     const rz = byId(STATE.data?.Catalogo_Razas, 'IDRaza', item.dog.IDRaza)?.NombreRaza || "Raza desconocida";
 
+                    const rRaza = resRazas.find(rr =>
+                        normalizeID(rr.IDInscripcion) === normalizeID(item.dog.IDInscripcion) &&
+                        normalizeID(rr.IDEvento) === STATE.selectedEventId &&
+                        normalizeID(rr.IDJuez) === STATE.selectedJudgeId
+                    );
+
+                    const tituloGanado =
+                        rRaza?.Titulo_Ganado ||
+                        rRaza?.Titulo ||
+                        rRaza?.TituloGanado ||
+                        rRaza?.Titulos ||
+                        "";
+
                     html += `
                         <div class="result-card mini ${isAus ? 'ausente-card' : ''}">
                             <div class="result-body mini">
@@ -517,12 +586,19 @@ function renderResultadosGrupos() {
                                     <div class="result-info" style="width: 100%;">
                                         <div class="dog-title mini">#${item.dog.NumeroCatalogo} — ${rz}</div>
                                         <div class="dog-subtitle">${item.dog.Observaciones || ''}</div>
+                                        ${tituloGanado ? `
+                                        <div class="public-title-row">
+                                            <span class="public-title-label">Título:</span>
+                                            <span class="public-title-badge">${tituloGanado}</span>
+                                        </div>
+                                        ` : ""}
                                         <div class="public-indicators">
                                             <div class="public-indicator-btn btn-aus ${isAus ? 'active' : ''}">AUS</div>
-                                            <div class="public-indicator-btn btn-1 ${p == 1 && !isAus ? 'active' : ''}">1º</div>
-                                            <div class="public-indicator-btn btn-2 ${p == 2 && !isAus ? 'active' : ''}">2º</div>
-                                            <div class="public-indicator-btn btn-3 ${p == 3 && !isAus ? 'active' : ''}">3º</div>
-                                            <div class="public-indicator-btn btn-4 ${p == 4 && !isAus ? 'active' : ''}">4º</div>
+                                            ${["1", "2", "3", "4", "5", "6", "7"].map(pst => `
+                                                <div class="public-indicator-btn btn-${pst} ${String(p) === pst && !isAus ? 'active' : ''}">
+                                                    ${pst}º
+                                                </div>
+                                            `).join("")}
                                         </div>
                                     </div>
                                 </div>
@@ -611,6 +687,7 @@ function renderResultadosBis() {
 
     const categories = ["Cachorros Especiales", "Cachorros", "Jóvenes", "Abierta / Adultos"];
     const tree = {};
+    const resRazas = STATE.data?.Resultados_Razas || [];
 
     candidates.forEach(cand => {
         const dog = byId(STATE.data?.Catalogo_Perros_Inscriptos, 'IDInscripcion', cand.IDInscripcion);
@@ -644,6 +721,19 @@ function renderResultadosBis() {
                 const isAus = isTruthy(item.res?.Ausente);
                 const p = item.res?.PuestoBIS || "";
 
+                const rRaza = resRazas.find(rr =>
+                    normalizeID(rr.IDInscripcion) === normalizeID(item.dog.IDInscripcion) &&
+                    normalizeID(rr.IDEvento) === STATE.selectedEventId &&
+                    normalizeID(rr.IDJuez) === STATE.selectedJudgeId
+                );
+
+                const tituloGanado =
+                    rRaza?.Titulo_Ganado ||
+                    rRaza?.Titulo ||
+                    rRaza?.TituloGanado ||
+                    rRaza?.Titulos ||
+                    "";
+
                 html += `
                     <div class="result-card mini ${isAus ? 'ausente-card' : ''}">
                         <div class="result-body mini">
@@ -652,12 +742,19 @@ function renderResultadosBis() {
                                     <div class="dog-title mini">${item.grupo} — #${item.dog.NumeroCatalogo}</div>
                                     <div class="dog-subtitle">${item.rz}</div>
                                     <div class="dog-meta mini">Cat. Orig: ${item.dog.IDCategoria} | ${item.dog.Observaciones || ''}</div>
+                                    ${tituloGanado ? `
+                                    <div class="public-title-row">
+                                        <span class="public-title-label">Título:</span>
+                                        <span class="public-title-badge">${tituloGanado}</span>
+                                    </div>
+                                    ` : ""}
                                     <div class="public-indicators">
                                         <div class="public-indicator-btn btn-aus ${isAus ? 'active' : ''}">AUS</div>
-                                        <div class="public-indicator-btn btn-1 ${p == 1 && !isAus ? 'active' : ''}">1º</div>
-                                        <div class="public-indicator-btn btn-2 ${p == 2 && !isAus ? 'active' : ''}">2º</div>
-                                        <div class="public-indicator-btn btn-3 ${p == 3 && !isAus ? 'active' : ''}">3º</div>
-                                        <div class="public-indicator-btn btn-4 ${p == 4 && !isAus ? 'active' : ''}">4º</div>
+                                        ${["1", "2", "3", "4", "5", "6", "7"].map(pst => `
+                                            <div class="public-indicator-btn btn-${pst} ${String(p) === pst && !isAus ? 'active' : ''}">
+                                                ${pst}º
+                                            </div>
+                                        `).join("")}
                                     </div>
                                 </div>
                             </div>
