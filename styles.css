@@ -283,6 +283,50 @@ section {
     margin-bottom: 0.75rem;
 }
 
+.track-judge-photo-wrap {
+    margin: 0.75rem 0;
+    display: flex;
+    justify-content: flex-start;
+    align-items: center;
+}
+
+.track-judge-photo {
+    width: 120px;
+    height: 120px;
+    object-fit: cover;
+    border-radius: 12px;
+    border: 2px solid var(--kc-border);
+    background: #fff;
+    box-shadow: var(--shadow-sm);
+}
+
+.track-judge-photo-placeholder {
+    width: 120px;
+    height: 120px;
+    border-radius: 12px;
+    border: 2px dashed var(--kc-border);
+    background: var(--kc-cream);
+    color: var(--kc-muted);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 2rem;
+}
+
+.track-card.active .track-judge-photo {
+    border-color: var(--kc-red);
+    box-shadow: 0 6px 14px rgba(152, 37, 43, 0.18);
+}
+
+@media (max-width: 700px) {
+
+    .track-judge-photo,
+    .track-judge-photo-placeholder {
+        width: 96px;
+        height: 96px;
+    }
+}
+
 .group-tag {
     background: var(--kc-cream);
     color: var(--kc-red-dark);
@@ -703,7 +747,46 @@ section {
     color: var(--kc-muted);
     cursor: default;
     text-transform: uppercase;
+    min-width: 34px;
+    text-align: center;
 }
+
+.public-title-row {
+    margin-top: 8px;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    align-items: center;
+}
+
+.public-title-label {
+    font-size: 0.75rem;
+    font-weight: 800;
+    color: var(--kc-muted);
+    text-transform: uppercase;
+}
+
+.public-title-badge {
+    display: inline-flex;
+    align-items: center;
+    padding: 4px 8px;
+    border-radius: 6px;
+    background: #dcfce7;
+    color: #166534;
+    border: 1px solid #86efac;
+    font-size: 0.75rem;
+    font-weight: 800;
+    text-transform: uppercase;
+}
+
+.public-indicator-btn.active.btn-5,
+.public-indicator-btn.active.btn-6,
+.public-indicator-btn.active.btn-7 {
+    background: var(--kc-red);
+    border-color: var(--kc-red-dark);
+    color: white;
+}
+
 
 .public-indicator-btn.active {
     background: var(--kc-red);
