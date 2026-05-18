@@ -922,3 +922,71 @@ footer a {
         min-width: 250px;
     }
 }
+
+/* --- COMPETENCIA LIMITADA --- */
+.track-card.track-card-limitada {
+    background: linear-gradient(145deg, #fffcf5 0%, #fff7e6 100%);
+    border: 2px solid #fed7aa;
+    box-shadow: 0 4px 14px rgba(249, 115, 22, 0.12);
+}
+
+.track-card.track-card-limitada:hover {
+    transform: translateY(-2px);
+    border-color: #f97316;
+    box-shadow: 0 6px 20px rgba(249, 115, 22, 0.2);
+}
+
+.track-card.track-card-limitada.active {
+    background: #fffefc;
+    border: 2px solid #ea580c;
+    box-shadow: 0 8px 24px rgba(234, 88, 12, 0.25);
+}
+
+.track-card-badge-container {
+    margin-bottom: 0.6rem;
+    display: flex;
+    justify-content: flex-start;
+}
+
+.badge-limitada, .limitada-badge {
+    background-color: #ea580c;
+    color: white;
+    font-size: 0.75rem;
+    font-weight: 800;
+    padding: 0.3rem 0.75rem;
+    border-radius: 6px;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    display: inline-block;
+}
+
+.track-limitada-subtitle, .limitada-note {
+    font-size: 0.85rem;
+    color: #9a3412;
+    font-weight: 700;
+    margin-bottom: 0.85rem;
+    background: #ffedd5;
+    padding: 0.5rem 0.75rem;
+    border-radius: 6px;
+    display: block;
+}
+
+.limitada-groups {
+    font-size: 0.8rem;
+    color: #c2410c;
+    font-weight: 700;
+    margin-top: 0.25rem;
+}
+
+.limitada-notice {
+    background: #fff7ed;
+    color: #9a3412;
+    border: 1px solid #fed7aa;
+    padding: 1rem 1.25rem;
+    border-radius: 8px;
+    font-weight: 700;
+    font-size: 0.95rem;
+    margin: 1rem 0;
+    text-align: center;
+    box-shadow: var(--shadow-sm);
+}
