@@ -26,7 +26,9 @@ const isTruthy = (v) => {
 
 const normalizeGrupo = (gr) => {
     if (!gr) return "G?";
-    const s = String(gr).trim().toUpperCase();
+    let s = String(gr).trim().toUpperCase();
+    if (s.startsWith("GRUPO ")) s = s.replace("GRUPO ", "G");
+    if (s.startsWith("GRUPO")) s = s.replace("GRUPO", "G");
     return s.startsWith("G") ? s : `G${s}`;
 };
 
@@ -34,6 +36,35 @@ const byId = (list, keyName, value) => {
     if (!list || !Array.isArray(list)) return null;
     const val = normalizeID(value);
     return list.find(item => normalizeID(item[keyName]) === val);
+};
+
+const findJudge = (juezIdOrName) => {
+    if (!STATE.data?.Jueces) return null;
+    const val = normalizeID(juezIdOrName);
+    return STATE.data.Jueces.find(j => normalizeID(j.IDJuez) === val || normalizeID(j.NombreJuez) === val);
+};
+
+const parseGrupos = (str) => {
+    const s = String(str || "").toUpperCase();
+    const matches = s.match(/(?:G|GRUPO)?\s*\d+/g);
+    if (!matches) return [];
+    return [...new Set(matches.map(x => normalizeGrupo(x.replace(/GRUPO/i, "").trim())))];
+};
+
+const getLimitadaGroups = (judge) => {
+    const directos = parseGrupos(judge?.GruposHabilitados);
+    if (directos.length) return directos;
+
+    const obs = String(judge?.Observaciones || "");
+    if (/LIMITAD/i.test(obs)) return parseGrupos(obs);
+
+    return [];
+};
+
+const isJudgeLimitada = (judge) => {
+    return String(judge?.TipoJuez || "").toUpperCase() === "LIMITADA" ||
+        /LIMITAD/i.test(String(judge?.Observaciones || "")) ||
+        getLimitadaGroups(judge).length > 0;
 };
 
 // CATEGORÍAS CANÓNICAS
@@ -145,7 +176,9 @@ async function loadPublicResults() {
                 STATE.selectedResultView = null;
             } else {
                 // Filter group selection against existing groups for this judge
-                const availableGroups = tracks
+                const judge = findJudge(STATE.selectedJudgeId);
+                const esLimitada = isJudgeLimitada(judge);
+                const availableGroups = esLimitada ? parseGrupos(judge?.GruposHabilitados) : tracks
                     .filter(p =>
                         normalizeID(p.IDEvento) === STATE.selectedEventId &&
                         normalizeID(p.IDPista) === STATE.selectedPistaId &&
@@ -181,28 +214,52 @@ window.selectTrack = (idPista, idJuez) => {
 
     STATE.selectedPistaId = normalizeID(idPista);
     STATE.selectedJudgeId = normalizeID(idJuez);
-    STATE.selectedGroupIds = [];
-    STATE.selectedResultView = null;
+
+    const judge = findJudge(idJuez);
+    const esLimitada = isJudgeLimitada(judge);
+    if (esLimitada) {
+        STATE.selectedGroupIds = parseGrupos(judge?.GruposHabilitados);
+        STATE.selectedResultView = 'razas';
+    } else {
+        STATE.selectedGroupIds = [];
+        STATE.selectedResultView = null;
+    }
     renderAll();
 };
 
 window.selectGroupToggle = (event, idPista, idJuez, idGrupo) => {
     if (event) event.stopPropagation();
 
+    const judge = findJudge(idJuez);
+    const esLimitada = isJudgeLimitada(judge);
+    const allowed = esLimitada ? parseGrupos(judge?.GruposHabilitados) : null;
+    const targetGroup = normalizeGrupo(idGrupo);
+
+    if (esLimitada && !allowed.includes(targetGroup)) {
+        return;
+    }
+
     if (STATE.selectedPistaId !== normalizeID(idPista) || STATE.selectedJudgeId !== normalizeID(idJuez)) {
         STATE.selectedPistaId = normalizeID(idPista);
         STATE.selectedJudgeId = normalizeID(idJuez);
-        STATE.selectedGroupIds = [];
-        STATE.selectedResultView = null;
+        if (esLimitada) {
+            STATE.selectedResultView = 'razas';
+        } else {
+            STATE.selectedResultView = null;
+        }
+        STATE.selectedGroupIds = [targetGroup];
+    } else {
+        const index = STATE.selectedGroupIds.indexOf(targetGroup);
+
+        if (index === -1) {
+            STATE.selectedGroupIds.push(targetGroup);
+        } else {
+            STATE.selectedGroupIds.splice(index, 1);
+        }
     }
 
-    const group = normalizeGrupo(idGrupo);
-    const index = STATE.selectedGroupIds.indexOf(group);
-
-    if (index === -1) {
-        STATE.selectedGroupIds.push(group);
-    } else {
-        STATE.selectedGroupIds.splice(index, 1);
+    if (esLimitada) {
+        STATE.selectedGroupIds = STATE.selectedGroupIds.filter(g => allowed.includes(g));
     }
 
     renderAll();
@@ -279,13 +336,17 @@ function renderPistas() {
         const key = `${p.IDPista}_${p.IDJuez}`;
 
         if (!grouped[key]) {
-            const judge = byId(STATE.data?.Jueces, 'IDJuez', p.IDJuez);
+            const judge = findJudge(p.IDJuez);
+            const esLimitada = isJudgeLimitada(judge);
+            const gruposLimitada = getLimitadaGroups(judge);
 
             grouped[key] = {
                 idPista: normalizeID(p.IDPista),
                 idJuez: normalizeID(p.IDJuez),
-                juez: judge ? judge.NombreJuez : "Juez no asignado",
+                juez: judge ? judge.NombreJuez : (p.IDJuez || "Juez no asignado"),
                 fotoUrl: getJudgePhotoUrl(judge),
+                esLimitada,
+                gruposLimitada,
                 grupos: new Set()
             };
         }
@@ -299,13 +360,29 @@ function renderPistas() {
             STATE.selectedJudgeId === track.idJuez
         );
 
+        const gruposList = track.esLimitada
+            ? track.gruposLimitada
+            : Array.from(track.grupos).sort();
+
         return `
-            <div class="track-card ${isTrackActive ? 'active' : ''}" 
+            <div class="track-card ${track.esLimitada ? 'track-card-limitada' : ''} ${isTrackActive ? 'active' : ''}" 
                  onclick="window.selectTrack('${track.idPista}', '${track.idJuez}')">
 
-                <div class="track-number">Pista ${track.idPista}</div>
+                ${track.esLimitada ? `
+                    <div class="track-card-badge-container">
+                        <span class="badge-limitada limitada-badge">LIMITADA</span>
+                    </div>
+                ` : ''}
 
+                <div class="track-number">Pista ${track.idPista}</div>
                 <div class="track-judge">${track.juez}</div>
+
+                ${track.esLimitada ? `
+                    <div class="track-limitada-subtitle limitada-note">
+                        <div style="font-weight: 800; margin-bottom: 4px;">Competencia limitada / nacional</div>
+                        <div class="limitada-groups">Grupos habilitados: ${gruposList.join(', ')}</div>
+                    </div>
+                ` : ''}
 
                 <div class="track-judge-photo-wrap">
                     ${track.fotoUrl
@@ -315,9 +392,8 @@ function renderPistas() {
                 </div>
 
                 <div class="track-groups">
-                    ${Array.from(track.grupos).sort().map(g => {
+                    ${gruposList.map(g => {
                 const isGroupActive = isTrackActive && STATE.selectedGroupIds.includes(g);
-
                 return `
                             <span class="group-tag clickable ${isGroupActive ? 'active' : ''}" 
                                   onclick="window.selectGroupToggle(event, '${track.idPista}', '${track.idJuez}', '${g}')">
@@ -350,22 +426,39 @@ function renderResultViewSelector() {
     if (!STATE.selectedJudgeId) {
         selectorHtml = `<div class="selection-message info">Seleccioná una pista/juez para comenzar.</div>`;
     } else {
-        const judge = byId(STATE.data?.Jueces, 'IDJuez', STATE.selectedJudgeId);
+        const judge = findJudge(STATE.selectedJudgeId);
+        const esLimitada = isJudgeLimitada(judge);
+        if (esLimitada && STATE.selectedResultView === 'bis') {
+            STATE.selectedResultView = 'razas';
+        }
+
         const groupText = STATE.selectedGroupIds.length > 0 ? ` — ${STATE.selectedGroupIds.sort().join(', ')}` : '';
-        const contextTitle = STATE.selectedResultView === 'bis' ? 'Consultando BIS' : 'Consultando';
+        const contextTitle = esLimitada ? 'Consultando limitada' : (STATE.selectedResultView === 'bis' ? 'Consultando BIS' : 'Consultando');
 
         selectorHtml = `
             <div class="result-view-selector">
                 <div class="selected-context">
                     ${contextTitle}: <strong>Pista ${STATE.selectedPistaId} — ${judge ? judge.NombreJuez : ''}${groupText}</strong>
                 </div>
+                ${esLimitada ? `
+                <div class="limitada-notice">
+                    Competencia limitada / nacional. Finaliza en Mejor de Grupo y no participa en Finales BIS.
+                </div>
+                ` : ''}
                 <div class="view-buttons">
+                    ${esLimitada ? `
+                    <button class="result-view-btn ${STATE.selectedResultView === 'razas' ? 'active' : ''}" 
+                            onclick="window.setResultView('razas')">RESULTADOS RAZAS / LIMITADA</button>
+                    <button class="result-view-btn ${STATE.selectedResultView === 'grupos' ? 'active' : ''}" 
+                            onclick="window.setResultView('grupos')">MEJOR DE GRUPO / LIMITADA</button>
+                    ` : `
                     <button class="result-view-btn ${STATE.selectedResultView === 'razas' ? 'active' : ''}" 
                             onclick="window.setResultView('razas')">Resultados Razas</button>
                     <button class="result-view-btn ${STATE.selectedResultView === 'grupos' ? 'active' : ''}" 
                             onclick="window.setResultView('grupos')">Final Grupo</button>
                     <button class="result-view-btn ${STATE.selectedResultView === 'bis' ? 'active' : ''}" 
                             onclick="window.setResultView('bis')">Finales BIS</button>
+                    `}
                 </div>
             </div>
         `;
@@ -378,8 +471,12 @@ function renderResultadosRazas() {
     const container = document.getElementById('razasContainer');
     if (!container) return;
 
-    const selectedGroups = STATE.selectedGroupIds || [];
-    if (selectedGroups.length === 0) {
+    const judge = findJudge(STATE.selectedJudgeId);
+    const esLimitada = isJudgeLimitada(judge);
+    const allowedGroups = esLimitada ? parseGrupos(judge?.GruposHabilitados) : (STATE.selectedGroupIds || []);
+    const activeGroups = (STATE.selectedGroupIds || []).filter(g => allowedGroups.includes(g));
+
+    if (activeGroups.length === 0) {
         container.innerHTML = `<div class="empty-state">Seleccioná uno o más grupos para ver resultados de razas.</div>`;
         return;
     }
@@ -392,7 +489,7 @@ function renderResultadosRazas() {
         if (!(r.Puesto || r.Calificacion || r.Titulo_Ganado || r.Titulo || r.TituloGanado || r.Titulos || isTruthy(r.Ausente))) return false;
 
         const dog = byId(STATE.data?.Catalogo_Perros_Inscriptos, 'IDInscripcion', r.IDInscripcion);
-        return dog && selectedGroups.includes(normalizeGrupo(dog.IDGrupo));
+        return dog && activeGroups.includes(normalizeGrupo(dog.IDGrupo));
     });
 
     if (results.length === 0) {
@@ -451,7 +548,9 @@ function renderResultadosRazas() {
                     return (parseInt(a.Puesto) || 99) - (parseInt(b.Puesto) || 99);
                 }).forEach(d => {
                     const isAus = isTruthy(d.Ausente);
-                    const tituloGanado = d.Titulo_Ganado || d.Titulo || d.TituloGanado || d.Titulos || "";
+                    const juezObj = byId(STATE.data?.Jueces, 'IDJuez', d.IDJuez);
+                    const esLimitada = isJudgeLimitada(juezObj) || d.TipoCompetencia === "LIMITADA";
+                    const tituloGanado = esLimitada ? "" : (d.Titulo_Ganado || d.Titulo || d.TituloGanado || d.Titulos || "");
 
                     html += `
                         <div class="result-item ${isAus ? 'ausente-item' : ''}">
@@ -497,8 +596,12 @@ function renderResultadosGrupos() {
     const container = document.getElementById('gruposContainer');
     if (!container) return;
 
-    const selectedGroups = STATE.selectedGroupIds || [];
-    if (selectedGroups.length === 0) {
+    const judge = findJudge(STATE.selectedJudgeId);
+    const esLimitada = isJudgeLimitada(judge);
+    const allowedGroups = esLimitada ? parseGrupos(judge?.GruposHabilitados) : (STATE.selectedGroupIds || []);
+    const activeGroups = (STATE.selectedGroupIds || []).filter(g => allowedGroups.includes(g));
+
+    if (activeGroups.length === 0) {
         container.innerHTML = `<div class="empty-state">Seleccioná uno o más grupos para ver los resultados oficiales.</div>`;
         return;
     }
@@ -507,7 +610,7 @@ function renderResultadosGrupos() {
     const results = (STATE.data?.Resultados_Grupos || []).filter(r =>
         normalizeID(r.IDEvento) === STATE.selectedEventId &&
         normalizeID(r.IDJuez) === STATE.selectedJudgeId &&
-        selectedGroups.includes(normalizeGrupo(r.IDGrupo)) &&
+        activeGroups.includes(normalizeGrupo(r.IDGrupo)) &&
         (r.PuestoGrupo || isTruthy(r.Ausente))
     );
 
@@ -572,12 +675,16 @@ function renderResultadosGrupos() {
                         normalizeID(rr.IDJuez) === STATE.selectedJudgeId
                     );
 
-                    const tituloGanado =
+                    const juezObj = byId(STATE.data?.Jueces, 'IDJuez', STATE.selectedJudgeId);
+                    const esLimitada = isJudgeLimitada(juezObj) || rRaza?.TipoCompetencia === "LIMITADA" || item.res.TipoCompetencia === "LIMITADA";
+
+                    const tituloGanado = esLimitada ? "" : (
                         rRaza?.Titulo_Ganado ||
                         rRaza?.Titulo ||
                         rRaza?.TituloGanado ||
                         rRaza?.Titulos ||
-                        "";
+                        ""
+                    );
 
                     html += `
                         <div class="result-card mini ${isAus ? 'ausente-card' : ''}">
@@ -663,6 +770,19 @@ function renderResultadosBis() {
         return;
     }
 
+    const judge = findJudge(STATE.selectedJudgeId);
+    const esLimitada = isJudgeLimitada(judge);
+    if (esLimitada) {
+        container.innerHTML = `<div class="limitada-notice">Esta competencia limitada no participa en Finales BIS.</div>`;
+        setTimeout(() => {
+            if (STATE.selectedResultView === 'bis') {
+                STATE.selectedResultView = 'razas';
+                renderAll();
+            }
+        }, 1500);
+        return;
+    }
+
     // 1. Get candidates: ONLY winners of Group Finals FOR THE SELECTED JUDGE
     const candidates = (STATE.data?.Resultados_Grupos || []).filter(r =>
         normalizeID(r.IDEvento) === STATE.selectedEventId &&
@@ -727,12 +847,16 @@ function renderResultadosBis() {
                     normalizeID(rr.IDJuez) === STATE.selectedJudgeId
                 );
 
-                const tituloGanado =
+                const juezObj = byId(STATE.data?.Jueces, 'IDJuez', STATE.selectedJudgeId);
+                const esLimitada = isJudgeLimitada(juezObj) || rRaza?.TipoCompetencia === "LIMITADA";
+
+                const tituloGanado = esLimitada ? "" : (
                     rRaza?.Titulo_Ganado ||
                     rRaza?.Titulo ||
                     rRaza?.TituloGanado ||
                     rRaza?.Titulos ||
-                    "";
+                    ""
+                );
 
                 html += `
                     <div class="result-card mini ${isAus ? 'ausente-card' : ''}">
