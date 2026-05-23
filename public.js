@@ -10,6 +10,8 @@ let STATE = {
     selectedPistaId: null,
     selectedGroupIds: [], // Multiple groups allowed
     selectedResultView: null, // "razas", "grupos", "bis"
+    selectedPublicView: "resultados",
+    catalogSortMode: "grupo_raza_categoria",
     lastUpdate: null,
     isFirstLoad: true
 };
@@ -77,6 +79,28 @@ const getSuperCat = (idCat) => {
     return "Otras";
 };
 
+// Category sort order for catalog
+const getCategoriaOrden = (idCat) => {
+    const id = normalizeID(idCat);
+    if (id === 'C00') return 0;
+    if (id === 'C01') return 1;
+    if (id === 'C02' || id === 'C03') return 2;
+    if (id === 'C04' || id === 'C05' || id === 'C06' || id === 'C07') return 3;
+    if (id === 'C08') return 4;
+    return 99;
+};
+
+// Canonical category label for catalog grouping
+const getCategoriaLabel = (idCat) => {
+    const id = normalizeID(idCat);
+    if (id === 'C00') return "Cachorros Especiales";
+    if (id === 'C01') return "Cachorros";
+    if (id === 'C02' || id === 'C03') return "Jóvenes";
+    if (id === 'C04' || id === 'C05' || id === 'C06' || id === 'C07') return "Abierta / Adultos";
+    if (id === 'C08') return "Veteranos";
+    return "Otras";
+};
+
 // TipoBIS Canónico basado en IDCategoria
 const getTipoBIS = (idCat) => {
     const id = normalizeID(idCat);
@@ -121,6 +145,85 @@ function getJudgePhotoUrl(judge) {
     }
 
     return raw;
+}
+
+const getFirstValue = (obj, keys) => {
+    if (!obj) return "";
+    for (const key of keys) {
+        const value = obj[key];
+        if (value !== null && value !== undefined && String(value).trim() !== "") return value;
+    }
+    return "";
+};
+
+const sortByNaturalText = (a, b) => String(a || "").localeCompare(String(b || ""), "es", {
+    numeric: true,
+    sensitivity: "base"
+});
+
+function getCatalogName(listName, idKey, nameKeys, idValue, fallback = "") {
+    const item = byId(STATE.data?.[listName], idKey, idValue);
+    return getFirstValue(item, nameKeys) || fallback;
+}
+
+function getDogTitles(dog) {
+    const directTitles = getFirstValue(dog, ["Titulos", "Títulos", "Titulo", "Título", "TitulosDeclarados", "TitulosPrevios"]);
+    if (directTitles) return directTitles;
+
+    const idsRaw = getFirstValue(dog, ["IDTitulo", "IDTitulos", "IDTítulo", "IDTítulos"]);
+    if (!idsRaw) return "";
+
+    const titleIds = String(idsRaw).split(/[,\|;]+/).map(normalizeID).filter(Boolean);
+    const titleNames = titleIds.map(id => getCatalogName(
+        "Catalogo_Titulos",
+        "IDTitulo",
+        ["NombreTitulo", "NombreTítulo", "Titulo", "Título", "Descripcion", "Descripción"],
+        id,
+        ""
+    )).filter(Boolean);
+
+    return titleNames.join(", ");
+}
+
+function getNumeroCatalogoOrden(dog) {
+    const numero = getFirstValue(dog, ["NumeroCatalogo", "NúmeroCatalogo", "Numero", "Número"]);
+    const parsed = parseInt(String(numero).replace(/[^\d]/g, ""), 10);
+    return Number.isFinite(parsed) ? parsed : 999999;
+}
+
+function getNombreRaza(dog) {
+    return getCatalogName(
+        "Catalogo_Razas",
+        "IDRaza",
+        ["NombreRaza", "Raza"],
+        dog?.IDRaza,
+        getFirstValue(dog, ["Raza", "NombreRaza"]) || "Raza desconocida"
+    );
+}
+
+function getNombreCategoria(dog) {
+    const idCategoria = normalizeID(dog?.IDCategoria);
+    return getCatalogName(
+        "Catalogo_Categorias",
+        "IDCategoria",
+        ["NombreCategoria", "Categoria", "Categoría"],
+        dog?.IDCategoria,
+        getFirstValue(dog, ["Categoria", "Categoría"]) || getCategoriaLabel(idCategoria)
+    );
+}
+
+function getNombreSexo(dog) {
+    return getCatalogName(
+        "Catalogo_Sexos",
+        "IDSexo",
+        ["NombreSexo", "Sexo"],
+        dog?.IDSexo,
+        getFirstValue(dog, ["Sexo"]) || "Sexo sin datos"
+    );
+}
+
+function getTitulosTexto(dog) {
+    return getDogTitles(dog);
 }
 
 
@@ -214,6 +317,7 @@ window.selectTrack = (idPista, idJuez) => {
 
     STATE.selectedPistaId = normalizeID(idPista);
     STATE.selectedJudgeId = normalizeID(idJuez);
+    STATE.selectedPublicView = "resultados";
 
     const judge = findJudge(idJuez);
     const esLimitada = isJudgeLimitada(judge);
@@ -234,6 +338,7 @@ window.selectGroupToggle = (event, idPista, idJuez, idGrupo) => {
     const esLimitada = isJudgeLimitada(judge);
     const allowed = esLimitada ? parseGrupos(judge?.GruposHabilitados) : null;
     const targetGroup = normalizeGrupo(idGrupo);
+    STATE.selectedPublicView = "resultados";
 
     if (esLimitada && !allowed.includes(targetGroup)) {
         return;
@@ -242,6 +347,7 @@ window.selectGroupToggle = (event, idPista, idJuez, idGrupo) => {
     if (STATE.selectedPistaId !== normalizeID(idPista) || STATE.selectedJudgeId !== normalizeID(idJuez)) {
         STATE.selectedPistaId = normalizeID(idPista);
         STATE.selectedJudgeId = normalizeID(idJuez);
+        STATE.selectedPublicView = "resultados";
         if (esLimitada) {
             STATE.selectedResultView = 'razas';
         } else {
@@ -267,8 +373,26 @@ window.selectGroupToggle = (event, idPista, idJuez, idGrupo) => {
 
 window.setResultView = (viewType) => {
     STATE.selectedResultView = viewType;
+    STATE.selectedPublicView = "resultados";
     renderAll();
 };
+
+window.openCatalogoInscriptos = () => {
+    STATE.selectedPublicView = "catalogo";
+    renderAll();
+};
+
+window.volverAResultados = () => {
+    STATE.selectedPublicView = "resultados";
+    renderAll();
+};
+
+window.setCatalogSortMode = (mode) => {
+    STATE.catalogSortMode = mode;
+    renderCatalogoInscriptos();
+};
+
+window.setCatalogoSort = window.setCatalogSortMode;
 
 // --- RENDERING FUNCTIONS ---
 
@@ -311,6 +435,217 @@ function renderEventSummary() {
             <p>${formatDateAR(event.Fecha)} • ${event.Lugar}</p>
         </div>
     `;
+}
+
+function renderPublicViewControls() {
+    const btn = document.getElementById('catalogoBtn');
+    if (!btn) return;
+
+    btn.classList.toggle('active', STATE.selectedPublicView === "catalogo");
+    btn.onclick = () => window.openCatalogoInscriptos();
+}
+
+function renderCatalogoInscriptos() {
+    const container = document.getElementById('catalogoContainer');
+    if (!container) return;
+
+    const perros = (STATE.data?.Catalogo_Perros_Inscriptos || []).filter(dog =>
+        normalizeID(dog.IDEvento) === STATE.selectedEventId
+    );
+
+    if (perros.length === 0) {
+        container.innerHTML = `<div class="empty-state">No hay perros inscriptos para esta exposición.</div>`;
+        return;
+    }
+
+    // Build enriched items
+    const catalogItems = perros.map(dog => {
+        const rawGroup = getFirstValue(dog, ["IDGrupo", "Grupo"]);
+        const grupoId = normalizeGrupo(rawGroup);
+        const grupo = getCatalogName(
+            "Catalogo_Grupos",
+            "IDGrupo",
+            ["NombreGrupo", "Grupo", "Descripcion", "Descripción"],
+            rawGroup,
+            grupoId
+        );
+        const raza = getNombreRaza(dog);
+        const idCategoria = normalizeID(dog.IDCategoria);
+        const categoria = getNombreCategoria(dog);
+        const catOrden = getCategoriaOrden(idCategoria);
+        const catLabel = getCategoriaLabel(idCategoria);
+        const sexo = getNombreSexo(dog);
+        const numero = getFirstValue(dog, ["NumeroCatalogo", "NúmeroCatalogo", "Numero", "Número"]) || "S/N";
+        const numeroInt = getNumeroCatalogoOrden(dog);
+        const titulos = getTitulosTexto(dog);
+        const observaciones = getFirstValue(dog, [
+            "Observaciones",
+            "Observación",
+            "Identificacion",
+            "Identificación",
+            "Microchip",
+            "Chip",
+            "Registro"
+        ]);
+
+        return { grupoId, grupo, raza, idCategoria, categoria, catOrden, catLabel, sexo, numero, numeroInt, titulos, observaciones };
+    });
+
+    const mode = STATE.catalogSortMode || "grupo_raza_categoria";
+
+    // Sort functions per mode
+    const sortFns = {
+        catalogo: (a, b) => a.numeroInt - b.numeroInt,
+        grupo_raza_categoria: (a, b) =>
+            sortByNaturalText(a.grupoId, b.grupoId) ||
+            sortByNaturalText(a.raza, b.raza) ||
+            (a.catOrden - b.catOrden) ||
+            sortByNaturalText(a.sexo, b.sexo) ||
+            (a.numeroInt - b.numeroInt),
+        grupo_categoria_raza: (a, b) =>
+            sortByNaturalText(a.grupoId, b.grupoId) ||
+            (a.catOrden - b.catOrden) ||
+            sortByNaturalText(a.raza, b.raza) ||
+            (a.numeroInt - b.numeroInt),
+        raza: (a, b) =>
+            sortByNaturalText(a.raza, b.raza) ||
+            (a.catOrden - b.catOrden) ||
+            sortByNaturalText(a.sexo, b.sexo) ||
+            (a.numeroInt - b.numeroInt),
+        categoria: (a, b) =>
+            (a.catOrden - b.catOrden) ||
+            sortByNaturalText(a.grupoId, b.grupoId) ||
+            sortByNaturalText(a.raza, b.raza) ||
+            (a.numeroInt - b.numeroInt)
+    };
+
+    catalogItems.sort(sortFns[mode] || sortFns.grupo_raza_categoria);
+
+    // --- Sort button bar ---
+    const sortButtons = [
+        { id: "catalogo", label: "ORDEN POR CATÁLOGO" },
+        { id: "grupo_raza_categoria", label: "GRUPO / RAZA / CATEGORÍA" },
+        { id: "grupo_categoria_raza", label: "GRUPO / CATEGORÍA / RAZA" },
+        { id: "raza", label: "RAZA" },
+        { id: "categoria", label: "CATEGORÍA" }
+    ];
+
+    let html = `
+            <div style="margin-bottom: 14px; display: flex; justify-content: center;">
+                <button class="catalogo-sort-btn active" onclick="window.volverAResultados()">
+                    ← VOLVER A RESULTADOS EN VIVO
+                </button>
+            </div>
+            <div class="catalogo-summary">Total inscriptos: <strong>${catalogItems.length}</strong></div>
+            <div class="catalogo-sort-bar">
+
+            <span class="catalogo-sort-label">Ordenar por:</span>
+            <div class="catalogo-sort-buttons">
+                ${sortButtons.map(b => `
+                    <button class="catalogo-sort-btn ${mode === b.id ? 'active' : ''}" onclick="window.setCatalogSortMode('${b.id}')">${b.label}</button>
+                `).join('')}
+            </div>
+        </div>
+        <div class="catalogo-list">
+    `;
+
+    // --- Render card helper ---
+    const renderDogCard = (item) => `
+        <div class="catalogo-dog-card">
+            <div class="catalogo-dog-header">
+                <span class="catalogo-number">#${item.numero}</span>
+                <span class="catalogo-dog-raza">— ${item.raza}</span>
+            </div>
+            <div class="catalogo-dog-details">
+                <span>${item.sexo}</span> · <span>${item.categoria}</span>
+            </div>
+            <div class="catalogo-dog-grupo">Grupo ${item.grupoId}</div>
+            <div class="catalogo-dog-meta"><strong>Títulos:</strong> ${item.titulos || 'Sin datos'}</div>
+            <div class="catalogo-dog-meta"><strong>Identificación:</strong> ${item.observaciones || 'Sin datos'}</div>
+        </div>
+    `;
+
+    // --- Grouped rendering per mode ---
+    if (mode === "catalogo") {
+        // Flat list by number, no grouping
+        html += `<div class="catalogo-flat-grid">`;
+        catalogItems.forEach(item => { html += renderDogCard(item); });
+        html += `</div>`;
+
+    } else if (mode === "grupo_raza_categoria" || mode === "grupo_categoria_raza") {
+        // Group by Grupo
+        const groups = {};
+        catalogItems.forEach(item => {
+            if (!groups[item.grupoId]) groups[item.grupoId] = { nombre: item.grupo, items: [] };
+            groups[item.grupoId].items.push(item);
+        });
+
+        Object.keys(groups).sort(sortByNaturalText).forEach(gId => {
+            const g = groups[gId];
+            html += `<article class="catalogo-group"><h3 class="catalogo-group-title">${g.nombre}</h3>`;
+
+            if (mode === "grupo_raza_categoria") {
+                // Sub-group by raza
+                const razas = {};
+                g.items.forEach(item => {
+                    if (!razas[item.raza]) razas[item.raza] = [];
+                    razas[item.raza].push(item);
+                });
+                Object.keys(razas).sort(sortByNaturalText).forEach(rz => {
+                    html += `<div class="catalogo-raza-card"><h4 class="catalogo-raza-title">${rz}</h4><div class="catalogo-dogs">`;
+                    razas[rz].forEach(item => { html += renderDogCard(item); });
+                    html += `</div></div>`;
+                });
+            } else {
+                // grupo_categoria_raza: sub-group by category
+                const cats = {};
+                g.items.forEach(item => {
+                    const key = `${item.catOrden}_${item.catLabel}`;
+                    if (!cats[key]) cats[key] = { label: item.catLabel, items: [] };
+                    cats[key].items.push(item);
+                });
+                Object.keys(cats).sort().forEach(key => {
+                    const cat = cats[key];
+                    html += `<div class="catalogo-raza-card"><h4 class="catalogo-raza-title">${cat.label}</h4><div class="catalogo-dogs">`;
+                    cat.items.forEach(item => { html += renderDogCard(item); });
+                    html += `</div></div>`;
+                });
+            }
+
+            html += `</article>`;
+        });
+
+    } else if (mode === "raza") {
+        // Group by raza
+        const razas = {};
+        catalogItems.forEach(item => {
+            if (!razas[item.raza]) razas[item.raza] = [];
+            razas[item.raza].push(item);
+        });
+        Object.keys(razas).sort(sortByNaturalText).forEach(rz => {
+            html += `<article class="catalogo-group"><h3 class="catalogo-group-title">${rz}</h3><div class="catalogo-dogs">`;
+            razas[rz].forEach(item => { html += renderDogCard(item); });
+            html += `</div></article>`;
+        });
+
+    } else if (mode === "categoria") {
+        // Group by category label
+        const cats = {};
+        catalogItems.forEach(item => {
+            const key = `${item.catOrden}_${item.catLabel}`;
+            if (!cats[key]) cats[key] = { label: item.catLabel, items: [] };
+            cats[key].items.push(item);
+        });
+        Object.keys(cats).sort().forEach(key => {
+            const cat = cats[key];
+            html += `<article class="catalogo-group"><h3 class="catalogo-group-title">${cat.label}</h3><div class="catalogo-dogs">`;
+            cat.items.forEach(item => { html += renderDogCard(item); });
+            html += `</div></article>`;
+        });
+    }
+
+    html += `</div>`;
+    container.innerHTML = html;
 }
 
 
@@ -897,7 +1232,8 @@ function renderSelectedResults() {
     const containers = {
         razas: document.getElementById('razasContainer'),
         grupos: document.getElementById('gruposContainer'),
-        bis: document.getElementById('bisContainer')
+        bis: document.getElementById('bisContainer'),
+        catalogo: document.getElementById('catalogoContainer')
     };
 
     Object.keys(containers).forEach(key => {
@@ -907,6 +1243,16 @@ function renderSelectedResults() {
             if (section) section.style.display = "none";
         }
     });
+
+    if (STATE.selectedPublicView === "catalogo") {
+        const catalogoContainer = containers.catalogo;
+        if (catalogoContainer) {
+            const section = catalogoContainer.closest('section');
+            if (section) section.style.display = "block";
+            renderCatalogoInscriptos();
+        }
+        return;
+    }
 
     if (!STATE.selectedResultView) return;
 
@@ -923,6 +1269,7 @@ function renderSelectedResults() {
 function renderAll() {
     renderEventSelector();
     renderEventSummary();
+    renderPublicViewControls();
     renderPistas();
     renderResultViewSelector();
     renderSelectedResults();
