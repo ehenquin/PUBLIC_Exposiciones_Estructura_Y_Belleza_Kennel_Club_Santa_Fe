@@ -232,6 +232,233 @@ section {
     box-shadow: var(--shadow-sm);
 }
 
+.public-view-controls {
+    display: flex;
+    justify-content: center;
+    margin: -0.5rem 0 2rem;
+}
+
+.btn-catalogo {
+    width: 100%;
+    max-width: 360px;
+    background: white;
+    color: var(--kc-red);
+    border: 2px solid var(--kc-red);
+    box-shadow: var(--shadow-sm);
+}
+
+.btn-catalogo:hover,
+.btn-catalogo.active {
+    background: var(--kc-red);
+    color: white;
+}
+
+.section-catalogo {
+    display: none;
+}
+
+.catalogo-summary {
+    background: white;
+    border: 1px solid var(--kc-border);
+    border-left: 5px solid var(--kc-red);
+    border-radius: var(--radius);
+    box-shadow: var(--shadow-sm);
+    color: var(--kc-red-dark);
+    font-size: 1rem;
+    font-weight: 700;
+    margin-bottom: 1rem;
+    padding: 1rem 1.25rem;
+}
+
+.catalogo-list {
+    display: grid;
+    gap: 1.25rem;
+}
+
+.catalogo-group {
+    background: rgba(255, 255, 255, 0.55);
+    border: 1px solid var(--kc-border);
+    border-radius: var(--radius);
+    box-shadow: var(--shadow-sm);
+    padding: 1rem;
+}
+
+.catalogo-group-title {
+    color: var(--kc-red-dark);
+    font-size: 1rem;
+    font-weight: 800;
+    margin-bottom: 1rem;
+    padding-left: 0.75rem;
+    border-left: 4px solid var(--kc-red);
+    text-transform: uppercase;
+}
+
+.catalogo-raza-card {
+    background: white;
+    border: 1px solid var(--kc-border);
+    border-radius: var(--radius);
+    overflow: hidden;
+    margin-bottom: 1rem;
+}
+
+.catalogo-raza-card:last-child {
+    margin-bottom: 0;
+}
+
+.catalogo-raza-title {
+    background: var(--kc-cream);
+    color: var(--kc-red-dark);
+    font-size: 0.95rem;
+    font-weight: 800;
+    padding: 0.85rem 1rem;
+    border-bottom: 1px solid var(--kc-border);
+}
+
+.catalogo-dogs {
+    display: grid;
+}
+
+/* Sort bar */
+.catalogo-sort-bar {
+    background: white;
+    border: 1px solid var(--kc-border);
+    border-radius: var(--radius);
+    box-shadow: var(--shadow-sm);
+    padding: 1rem 1.25rem;
+    margin-bottom: 1.25rem;
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 0.75rem;
+}
+
+.catalogo-sort-label {
+    font-size: 0.85rem;
+    font-weight: 800;
+    color: var(--kc-red-dark);
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    white-space: nowrap;
+}
+
+.catalogo-sort-buttons {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+}
+
+.catalogo-sort-btn {
+    padding: 0.55rem 1rem;
+    font-size: 0.8rem;
+    font-weight: 700;
+    border: 2px solid var(--kc-border);
+    border-radius: 8px;
+    background: white;
+    color: var(--kc-muted);
+    cursor: pointer;
+    transition: all 0.2s;
+    text-transform: none;
+}
+
+.catalogo-sort-btn:hover {
+    border-color: var(--kc-red);
+    color: var(--kc-red);
+}
+
+.catalogo-sort-btn.active {
+    background: var(--kc-red);
+    color: white;
+    border-color: var(--kc-red-dark);
+    box-shadow: 0 2px 6px rgba(152, 37, 43, 0.25);
+}
+
+/* Dog card */
+.catalogo-dog-card {
+    background: white;
+    border: 1px solid var(--kc-border);
+    border-radius: 10px;
+    padding: 1rem 1.15rem;
+    transition: box-shadow 0.2s;
+}
+
+.catalogo-dog-card:hover {
+    box-shadow: var(--shadow);
+}
+
+.catalogo-dog-header {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: baseline;
+    gap: 0.35rem;
+    margin-bottom: 0.3rem;
+}
+
+.catalogo-number {
+    color: var(--kc-black);
+    font-size: 1.1rem;
+    font-weight: 900;
+}
+
+.catalogo-dog-raza {
+    color: var(--kc-red-dark);
+    font-size: 1rem;
+    font-weight: 700;
+}
+
+.catalogo-dog-details {
+    color: var(--kc-muted);
+    font-size: 0.9rem;
+    font-weight: 600;
+    margin-bottom: 0.2rem;
+}
+
+.catalogo-dog-grupo {
+    color: var(--kc-muted);
+    font-size: 0.8rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.03em;
+    margin-bottom: 0.3rem;
+}
+
+.catalogo-dog-meta {
+    color: var(--kc-muted);
+    font-size: 0.85rem;
+    margin-top: 0.35rem;
+    overflow-wrap: anywhere;
+}
+
+.catalogo-dog-meta strong {
+    color: var(--kc-red-dark);
+}
+
+/* Flat grid (for catalog number order) */
+.catalogo-flat-grid {
+    display: grid;
+    gap: 0.75rem;
+    grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+}
+
+/* Dogs inside grouped views */
+.catalogo-dogs .catalogo-dog-card,
+.catalogo-flat-grid .catalogo-dog-card {
+    margin-bottom: 0;
+}
+
+.catalogo-dogs {
+    display: grid;
+    gap: 0.65rem;
+    padding: 0.85rem;
+}
+
+.catalogo-raza-card .catalogo-dogs {
+    padding: 0.85rem;
+}
+
+.catalogo-group > .catalogo-dogs {
+    padding: 0.5rem;
+}
+
 .tracks-grid {
     display: grid;
     gap: 1rem;
@@ -240,6 +467,30 @@ section {
 
 @media (max-width: 700px) {
     .tracks-grid {
+        grid-template-columns: 1fr;
+    }
+
+    .public-view-controls {
+        margin-top: -0.75rem;
+    }
+
+    .catalogo-group {
+        padding: 0.75rem;
+    }
+
+    .catalogo-sort-buttons {
+        width: 100%;
+    }
+
+    .catalogo-sort-btn {
+        flex: 1;
+        min-width: 120px;
+        font-size: 0.75rem;
+        padding: 0.5rem 0.6rem;
+        text-align: center;
+    }
+
+    .catalogo-flat-grid {
         grid-template-columns: 1fr;
     }
 }
