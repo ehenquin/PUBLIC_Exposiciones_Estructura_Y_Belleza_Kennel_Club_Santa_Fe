@@ -816,15 +816,79 @@ function renderResultadosRazas() {
         return;
     }
 
+    const esc = (value) => String(value ?? "")
+        .replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;");
+
+    const splitMultiPublic = (value) => String(value || "")
+        .split(",")
+        .map(x => x.trim())
+        .filter(Boolean);
+
+    const formatRolFinal = (rol) => {
+        const mapa = {
+            MEJOR_CACHORRO_RAZA: "Mejor Cachorro de Raza",
+            SEXO_OPUESTO_CACHORRO: "Sexo Opuesto Cachorro",
+            MEJOR_JOVEN_MACHO: "Mejor Joven Macho",
+            MEJOR_JOVEN_HEMBRA: "Mejor Joven Hembra",
+            MEJOR_JOVEN_RAZA: "Mejor Joven de Raza",
+            SEXO_OPUESTO_JOVEN: "Sexo Opuesto Joven",
+            MEJOR_MACHO: "Mejor Macho",
+            MEJOR_HEMBRA: "Mejor Hembra",
+            MEJOR_DE_RAZA: "Mejor de Raza",
+            SEXO_OPUESTO_RAZA: "Sexo Opuesto de Raza",
+            MEJOR_VETERANO_RAZA: "Mejor Veterano de Raza",
+            SEXO_OPUESTO_VETERANO: "Sexo Opuesto Veterano"
+        };
+
+        return mapa[rol] || String(rol).replaceAll("_", " ");
+    };
+
+    const formatFinalGrupo = (cat) => {
+        const mapa = {
+            "CACHORROS ESPECIALES": "Final Grupo Cachorros Especiales",
+            "CACHORROS": "Final Grupo Cachorros",
+            "JOVENES": "Final Grupo Jóvenes",
+            "ADULTOS": "Final Grupo Adultos",
+            "VETERANOS": "Final Grupo Veteranos"
+        };
+
+        return mapa[cat] || cat;
+    };
+
+    const getSuperCatRazas = (idCat) => {
+        const id = normalizeID(idCat);
+        if (id === 'C00') return "CACHORROS ESPECIALES";
+        if (id === 'C01') return "CACHORROS";
+        if (['C02', 'C03'].includes(id)) return "JÓVENES";
+        if (['C04', 'C05', 'C06', 'C07'].includes(id)) return "ABIERTA / ADULTOS";
+        if (id === 'C08') return "VETERANOS";
+        return "OTRAS";
+    };
+
+    const categoriesOrder = [
+        "CACHORROS ESPECIALES",
+        "CACHORROS",
+        "JÓVENES",
+        "ABIERTA / ADULTOS",
+        "VETERANOS",
+        "OTRAS"
+    ];
+
     const results = (STATE.data?.Resultados_Razas || []).filter(r => {
         if (normalizeID(r.IDEvento) !== STATE.selectedEventId) return false;
         if (normalizeID(r.IDJuez) !== STATE.selectedJudgeId) return false;
 
-        // Show if it has a placement, qualification, title OR is absent
-        if (!(r.Puesto || r.Calificacion || r.Titulo_Ganado || r.Titulo || r.TituloGanado || r.Titulos || isTruthy(r.Ausente))) return false;
-
         const dog = byId(STATE.data?.Catalogo_Perros_Inscriptos, 'IDInscripcion', r.IDInscripcion);
-        return dog && activeGroups.includes(normalizeGrupo(dog.IDGrupo));
+        if (!dog || !activeGroups.includes(normalizeGrupo(dog.IDGrupo))) return false;
+
+        const tieneResultadoClase = !!(r.Puesto || r.Calificacion || r.Titulo_Ganado || r.Titulo || r.TituloGanado || r.Titulos);
+        const tieneFinalesRaza = splitMultiPublic(r.RolesFinalRaza).length > 0;
+        const tienePaseGrupo = splitMultiPublic(r.FinalGrupoCategorias).length > 0;
+        const estaAusente = isTruthy(r.Ausente);
+
+        return tieneResultadoClase || tieneFinalesRaza || tienePaseGrupo || estaAusente;
     });
 
     if (results.length === 0) {
@@ -832,21 +896,12 @@ function renderResultadosRazas() {
         return;
     }
 
-    // Strict category order for Razas
-    const getSuperCatRazas = (idCat) => {
-        const id = normalizeID(idCat);
-        if (id === 'C00') return "CACHORROS ESPECIALES";
-        if (id === 'C01') return "CACHORROS";
-        if (['C02', 'C03'].includes(id)) return "JÓVENES";
-        if (['C04', 'C05', 'C06', 'C07'].includes(id)) return "ABIERTAS";
-        return "OTRAS";
-    };
-
-    const categoriesOrder = ["CACHORROS ESPECIALES", "CACHORROS", "JÓVENES", "ABIERTAS", "OTRAS"];
-
     const tree = {};
+
     results.forEach(res => {
         const dog = byId(STATE.data?.Catalogo_Perros_Inscriptos, 'IDInscripcion', res.IDInscripcion);
+        if (!dog) return;
+
         const grupoId = normalizeGrupo(dog.IDGrupo);
         const raza = byId(STATE.data?.Catalogo_Razas, 'IDRaza', dog.IDRaza)?.NombreRaza || "Raza desconocida";
         const sCat = getSuperCatRazas(dog.IDCategoria);
@@ -856,26 +911,42 @@ function renderResultadosRazas() {
         if (!tree[grupoId]) tree[grupoId] = {};
         if (!tree[grupoId][raza]) tree[grupoId][raza] = {};
         if (!tree[grupoId][raza][sCat]) tree[grupoId][raza][sCat] = [];
-        tree[grupoId][raza][sCat].push({ ...res, dog, raza, sCat, sexo, catName });
+
+        tree[grupoId][raza][sCat].push({
+            ...res,
+            dog,
+            raza,
+            sCat,
+            sexo,
+            catName
+        });
     });
 
     let html = "";
-    Object.keys(tree).sort().forEach(gr => {
-        html += `<h3 class="group-header">${gr}</h3>`;
-        Object.keys(tree[gr]).sort().forEach(rz => {
-            html += `<div class="result-card"><div class="result-card-header">${rz}</div><div class="result-body">`;
+
+    Object.keys(tree).sort(sortByNaturalText).forEach(gr => {
+        html += `<h3 class="group-header">${esc(gr)}</h3>`;
+
+        Object.keys(tree[gr]).sort(sortByNaturalText).forEach(rz => {
+            html += `
+                <div class="result-card">
+                    <div class="result-card-header">${esc(rz)}</div>
+                    <div class="result-body">
+            `;
 
             let firstBlock = true;
+
             categoriesOrder.forEach(sc => {
                 if (!tree[gr][rz][sc]) return;
 
-                // Category separator
                 if (!firstBlock) {
                     html += `<div class="raza-category-separator"></div>`;
                 }
 
-                html += `<div class="raza-category-block">`;
-                html += `<div class="raza-category-title">${sc}</div>`;
+                html += `
+                    <div class="raza-category-block">
+                        <div class="raza-category-title">${esc(sc)}</div>
+                `;
 
                 tree[gr][rz][sc].sort((a, b) => {
                     if (isTruthy(a.Ausente)) return 100;
@@ -884,38 +955,66 @@ function renderResultadosRazas() {
                 }).forEach(d => {
                     const isAus = isTruthy(d.Ausente);
                     const juezObj = byId(STATE.data?.Jueces, 'IDJuez', d.IDJuez);
-                    const esLimitada = isJudgeLimitada(juezObj) || d.TipoCompetencia === "LIMITADA";
-                    const tituloGanado = esLimitada ? "" : (d.Titulo_Ganado || d.Titulo || d.TituloGanado || d.Titulos || "");
+                    const esLimitadaItem = isJudgeLimitada(juezObj) || d.TipoCompetencia === "LIMITADA";
+
+                    const tituloGanado = esLimitadaItem ? "" : (
+                        d.Titulo_Ganado ||
+                        d.Titulo ||
+                        d.TituloGanado ||
+                        d.Titulos ||
+                        ""
+                    );
+
+                    const rolesFinalRaza = splitMultiPublic(d.RolesFinalRaza);
+                    const finalesGrupo = splitMultiPublic(d.FinalGrupoCategorias);
 
                     html += `
                         <div class="result-item ${isAus ? 'ausente-item' : ''}">
                             <div class="result-info" style="width: 100%;">
-                                <div class="dog-title">#${d.dog.NumeroCatalogo} — ${rz}</div>
-                                <div class="dog-subtitle">${d.sexo} | ${d.catName}</div>
+                                <div class="dog-title">#${esc(d.dog.NumeroCatalogo)} — ${esc(rz)}</div>
+                                <div class="dog-subtitle">${esc(d.sexo)} | ${esc(d.catName)}</div>
+
                                 <div class="dog-meta">
-                                    <strong>Identificación:</strong> ${d.dog.Observaciones || 'Sin datos'}
+                                    <strong>Identificación:</strong> ${esc(d.dog.Observaciones || 'Sin datos')}
                                 </div>
+
+                                <div class="public-clean-summary">
+                                    ${isAus ? `<span class="public-status-badge badge-ausente">AUSENTE</span>` : ""}
+                                    ${d.Calificacion ? `<span class="public-status-badge badge-calif">${esc(d.Calificacion)}</span>` : ""}
+                                    ${d.Puesto ? `<span class="public-status-badge badge-puesto">${esc(d.Puesto)}° Puesto</span>` : ""}
+                                </div>
+
                                 ${tituloGanado ? `
-                                <div class="public-title-row">
-                                  <span class="public-title-label">Título:</span>
-                                  <span class="public-title-badge">${tituloGanado}</span>
-                                </div>
+                                    <div class="public-title-row">
+                                        <span class="public-title-label">Título:</span>
+                                        ${splitMultiPublic(tituloGanado).map(t => `
+                                            <span class="public-title-badge">${esc(t)}</span>
+                                        `).join("")}
+                                    </div>
                                 ` : ""}
-                                <div class="result-labels">
-                                    ${d.Calificacion ? `<span class="label label-qualification">${d.Calificacion}</span>` : ''}
-                                </div>
-                                <div class="public-indicators">
-                                    <div class="public-indicator-btn btn-aus ${isAus ? 'active' : ''}">AUS</div>
-                                    ${["1", "2", "3", "4", "5", "6", "7"].map(pst => `
-                                      <div class="public-indicator-btn btn-${pst} ${String(d.Puesto) === pst && !isAus ? 'active' : ''}">
-                                        ${pst}º
-                                      </div>
-                                    `).join("")}
-                                </div>
+
+                                ${rolesFinalRaza.length ? `
+                                    <div class="public-title-row">
+                                        <span class="public-title-label">Finales de raza:</span>
+                                        ${rolesFinalRaza.map(rol => `
+                                            <span class="public-final-badge">${esc(formatRolFinal(rol))}</span>
+                                        `).join("")}
+                                    </div>
+                                ` : ""}
+
+                                ${finalesGrupo.length ? `
+                                    <div class="public-title-row">
+                                        <span class="public-title-label">Pasa a grupo:</span>
+                                        ${finalesGrupo.map(cat => `
+                                            <span class="public-group-pass-badge">${esc(formatFinalGrupo(cat))}</span>
+                                        `).join("")}
+                                    </div>
+                                ` : ""}
                             </div>
                         </div>
                     `;
                 });
+
                 html += `</div>`;
                 firstBlock = false;
             });
@@ -923,6 +1022,7 @@ function renderResultadosRazas() {
             html += `</div></div>`;
         });
     });
+
     container.innerHTML = html;
 }
 
@@ -941,13 +1041,64 @@ function renderResultadosGrupos() {
         return;
     }
 
-    // 1. Get official results from Resultados_Grupos (Primary Source)
-    const results = (STATE.data?.Resultados_Grupos || []).filter(r =>
-        normalizeID(r.IDEvento) === STATE.selectedEventId &&
-        normalizeID(r.IDJuez) === STATE.selectedJudgeId &&
-        activeGroups.includes(normalizeGrupo(r.IDGrupo)) &&
-        (r.PuestoGrupo || isTruthy(r.Ausente))
-    );
+    const esc = (value) => String(value ?? "")
+        .replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;");
+
+    const splitMultiPublic = (value) => String(value || "")
+        .split(",")
+        .map(x => x.trim())
+        .filter(Boolean);
+
+    const normalizeFinalGrupoCategoria = (value) => {
+        const s = String(value || "").trim().toUpperCase();
+
+        if (s.includes("CACHORROS ESPECIALES")) return "CACHORROS ESPECIALES";
+        if (s === "CACHORROS" || s.includes("CACHORROS")) return "CACHORROS";
+        if (s.includes("JOVEN")) return "JOVENES";
+        if (s.includes("ADULTO") || s.includes("ABIERTA")) return "ADULTOS";
+        if (s.includes("VETERANO")) return "VETERANOS";
+
+        return "";
+    };
+
+    const getFinalGrupoFromDogFallback = (idCat) => {
+        const id = normalizeID(idCat);
+
+        if (id === "C00") return "CACHORROS ESPECIALES";
+        if (id === "C01") return "CACHORROS";
+        if (["C02", "C03"].includes(id)) return "JOVENES";
+        if (["C04", "C05", "C06", "C07"].includes(id)) return "ADULTOS";
+        if (id === "C08") return "VETERANOS";
+
+        return "";
+    };
+
+    const getFinalGrupoLabel = (key) => {
+        const mapa = {
+            "CACHORROS ESPECIALES": "Cachorros Especiales",
+            "CACHORROS": "Cachorros",
+            "JOVENES": "Jóvenes",
+            "ADULTOS": "Abierta / Adultos",
+            "VETERANOS": "Veteranos"
+        };
+
+        return mapa[key] || key || "Sin categoría";
+    };
+
+    const results = (STATE.data?.Resultados_Grupos || []).filter(r => {
+        if (normalizeID(r.IDEvento) !== STATE.selectedEventId) return false;
+        if (normalizeID(r.IDJuez) !== STATE.selectedJudgeId) return false;
+
+        const dog = byId(STATE.data?.Catalogo_Perros_Inscriptos, 'IDInscripcion', r.IDInscripcion);
+        if (!dog) return false;
+
+        const grupoResultado = normalizeGrupo(r.IDGrupo || dog.IDGrupo);
+        if (!activeGroups.includes(grupoResultado)) return false;
+
+        return !!(r.PuestoGrupo || isTruthy(r.Ausente));
+    });
 
     const resRazas = STATE.data?.Resultados_Razas || [];
 
@@ -956,34 +1107,49 @@ function renderResultadosGrupos() {
         return;
     }
 
-    const categories = ["Cachorros Especiales", "Cachorros", "Jóvenes", "Abierta / Adultos"];
+    const categories = [
+        "CACHORROS ESPECIALES",
+        "CACHORROS",
+        "JOVENES",
+        "ADULTOS",
+        "VETERANOS"
+    ];
+
     const tree = {};
     categories.forEach(c => tree[c] = {});
 
-    // 2. Process results and cross-reference with catalog
     results.forEach(res => {
         const dog = byId(STATE.data?.Catalogo_Perros_Inscriptos, 'IDInscripcion', res.IDInscripcion);
         if (!dog) return;
 
-        const sCat = getSuperCat(dog.IDCategoria);
-        const gr = normalizeGrupo(dog.IDGrupo);
+        const finalKey =
+            normalizeFinalGrupoCategoria(res.FinalGrupoCategoria) ||
+            getFinalGrupoFromDogFallback(dog.IDCategoria);
 
-        if (!tree[sCat][gr]) tree[sCat][gr] = [];
-        tree[sCat][gr].push({ dog, res });
+        if (!finalKey) return;
+
+        const gr = normalizeGrupo(res.IDGrupo || dog.IDGrupo);
+
+        if (!tree[finalKey]) tree[finalKey] = {};
+        if (!tree[finalKey][gr]) tree[finalKey][gr] = [];
+
+        tree[finalKey][gr].push({ dog, res, finalKey });
     });
 
     let html = `<div class="finales-categorias-grid">`;
-    categories.forEach(sc => {
+
+    categories.forEach(finalKey => {
+        const finalLabel = getFinalGrupoLabel(finalKey);
+
         html += `
             <div class="finales-categoria-card">
-                <div class="category-title">${sc}</div>
+                <div class="category-title">${esc(finalLabel)}</div>
                 <div class="category-results">
         `;
 
-        // Sort groups numerically (G1, G2...)
-        const groupsInCat = Object.keys(tree[sc]).sort((a, b) => {
-            const nA = parseInt(a.replace(/\D/g, '')) || 0;
-            const nB = parseInt(b.replace(/\D/g, '')) || 0;
+        const groupsInCat = Object.keys(tree[finalKey] || {}).sort((a, b) => {
+            const nA = parseInt(a.replace(/\D/g, ''), 10) || 0;
+            const nB = parseInt(b.replace(/\D/g, ''), 10) || 0;
             return nA - nB;
         });
 
@@ -991,14 +1157,14 @@ function renderResultadosGrupos() {
             html += `<div class="empty-state mini">Sin resultados oficiales</div>`;
         } else {
             groupsInCat.forEach(gr => {
-                html += `<div class="grupo-subtitle">${gr}</div>`;
+                html += `<div class="grupo-subtitle">${esc(gr)}</div>`;
 
-                const groupResults = tree[sc][gr];
-                // Sort by placement: 1, 2, 3, 4, then Ausentes
+                const groupResults = tree[finalKey][gr];
+
                 groupResults.sort((a, b) => {
                     if (isTruthy(a.res.Ausente)) return 100;
                     if (isTruthy(b.res.Ausente)) return -100;
-                    return (parseInt(a.res.PuestoGrupo) || 99) - (parseInt(b.res.PuestoGrupo) || 99);
+                    return (parseInt(a.res.PuestoGrupo, 10) || 99) - (parseInt(b.res.PuestoGrupo, 10) || 99);
                 }).forEach(item => {
                     const isAus = isTruthy(item.res.Ausente);
                     const p = item.res.PuestoGrupo || "";
@@ -1007,13 +1173,21 @@ function renderResultadosGrupos() {
                     const rRaza = resRazas.find(rr =>
                         normalizeID(rr.IDInscripcion) === normalizeID(item.dog.IDInscripcion) &&
                         normalizeID(rr.IDEvento) === STATE.selectedEventId &&
+                        normalizeID(rr.IDJuez) === STATE.selectedJudgeId &&
+                        splitMultiPublic(rr.FinalGrupoCategorias).includes(item.finalKey)
+                    ) || resRazas.find(rr =>
+                        normalizeID(rr.IDInscripcion) === normalizeID(item.dog.IDInscripcion) &&
+                        normalizeID(rr.IDEvento) === STATE.selectedEventId &&
                         normalizeID(rr.IDJuez) === STATE.selectedJudgeId
                     );
 
                     const juezObj = byId(STATE.data?.Jueces, 'IDJuez', STATE.selectedJudgeId);
-                    const esLimitada = isJudgeLimitada(juezObj) || rRaza?.TipoCompetencia === "LIMITADA" || item.res.TipoCompetencia === "LIMITADA";
+                    const esLimitadaItem =
+                        isJudgeLimitada(juezObj) ||
+                        rRaza?.TipoCompetencia === "LIMITADA" ||
+                        item.res.TipoCompetencia === "LIMITADA";
 
-                    const tituloGanado = esLimitada ? "" : (
+                    const tituloGanado = esLimitadaItem ? "" : (
                         rRaza?.Titulo_Ganado ||
                         rRaza?.Titulo ||
                         rRaza?.TituloGanado ||
@@ -1026,21 +1200,22 @@ function renderResultadosGrupos() {
                             <div class="result-body mini">
                                 <div class="result-item mini">
                                     <div class="result-info" style="width: 100%;">
-                                        <div class="dog-title mini">#${item.dog.NumeroCatalogo} — ${rz}</div>
-                                        <div class="dog-subtitle">${item.dog.Observaciones || ''}</div>
+                                        <div class="dog-title mini">#${esc(item.dog.NumeroCatalogo)} — ${esc(rz)}</div>
+                                        <div class="dog-subtitle">${esc(item.dog.Observaciones || '')}</div>
+
                                         ${tituloGanado ? `
-                                        <div class="public-title-row">
-                                            <span class="public-title-label">Título:</span>
-                                            <span class="public-title-badge">${tituloGanado}</span>
-                                        </div>
+                                            <div class="public-title-row">
+                                                <span class="public-title-label">Título:</span>
+                                                ${splitMultiPublic(tituloGanado).map(t => `
+                                                    <span class="public-title-badge">${esc(t)}</span>
+                                                `).join("")}
+                                            </div>
                                         ` : ""}
-                                        <div class="public-indicators">
-                                            <div class="public-indicator-btn btn-aus ${isAus ? 'active' : ''}">AUS</div>
-                                            ${["1", "2", "3", "4", "5", "6", "7"].map(pst => `
-                                                <div class="public-indicator-btn btn-${pst} ${String(p) === pst && !isAus ? 'active' : ''}">
-                                                    ${pst}º
-                                                </div>
-                                            `).join("")}
+
+                                        <div class="public-clean-summary">
+                                            ${isAus ? `<span class="public-status-badge badge-ausente">AUSENTE</span>` : ""}
+                                            ${p ? `<span class="public-status-badge badge-puesto">${esc(p)}° Puesto</span>` : ""}
+                                            <span class="public-group-pass-badge">${esc(finalLabel)}</span>
                                         </div>
                                     </div>
                                 </div>
@@ -1050,8 +1225,10 @@ function renderResultadosGrupos() {
                 });
             });
         }
+
         html += `</div></div>`;
     });
+
     html += `</div>`;
     container.innerHTML = html;
 }
@@ -1107,61 +1284,168 @@ function renderResultadosBis() {
 
     const judge = findJudge(STATE.selectedJudgeId);
     const esLimitada = isJudgeLimitada(judge);
+
     if (esLimitada) {
         container.innerHTML = `<div class="limitada-notice">Esta competencia limitada no participa en Finales BIS.</div>`;
+
         setTimeout(() => {
             if (STATE.selectedResultView === 'bis') {
                 STATE.selectedResultView = 'razas';
                 renderAll();
             }
         }, 1500);
+
         return;
     }
 
-    // 1. Get candidates: ONLY winners of Group Finals FOR THE SELECTED JUDGE
+    const esc = (value) => String(value ?? "")
+        .replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;");
+
+    const splitMultiPublic = (value) => String(value || "")
+        .split(",")
+        .map(x => x.trim())
+        .filter(Boolean);
+
+    const normalizeFinalGrupoCategoria = (value) => {
+        const s = String(value || "").trim().toUpperCase();
+
+        if (s.includes("CACHORROS ESPECIALES")) return "CACHORROS ESPECIALES";
+        if (s === "CACHORROS" || s.includes("CACHORROS")) return "CACHORROS";
+        if (s.includes("JOVEN")) return "JOVENES";
+        if (s.includes("ADULTO") || s.includes("ABIERTA")) return "ADULTOS";
+        if (s.includes("VETERANO")) return "VETERANOS";
+
+        return "";
+    };
+
+    const normalizeTipoBisToFinalKey = (value) => {
+        const s = String(value || "").trim().toUpperCase();
+
+        if (s.includes("CACHORROS ESPECIALES")) return "CACHORROS ESPECIALES";
+        if (s.includes("CACHORROS")) return "CACHORROS";
+        if (s.includes("JOVEN")) return "JOVENES";
+        if (s.includes("ADULTO") || s.includes("ABIERTA")) return "ADULTOS";
+        if (s.includes("VETERANO")) return "VETERANOS";
+
+        return "";
+    };
+
+    const getFinalGrupoFromDogFallback = (idCat) => {
+        const id = normalizeID(idCat);
+
+        if (id === "C00") return "CACHORROS ESPECIALES";
+        if (id === "C01") return "CACHORROS";
+        if (["C02", "C03"].includes(id)) return "JOVENES";
+        if (["C04", "C05", "C06", "C07"].includes(id)) return "ADULTOS";
+        if (id === "C08") return "VETERANOS";
+
+        return "";
+    };
+
+    const getFinalGrupoLabel = (key) => {
+        const mapa = {
+            "CACHORROS ESPECIALES": "Cachorros Especiales",
+            "CACHORROS": "Cachorros",
+            "JOVENES": "Jóvenes",
+            "ADULTOS": "Abierta / Adultos",
+            "VETERANOS": "Veteranos"
+        };
+
+        return mapa[key] || key || "Sin categoría";
+    };
+
+    // 1. Candidatos BIS:
+    // Solo ganadores de Final de Grupo del juez seleccionado.
+    // La categoría BIS sale de Resultados_Grupos.FinalGrupoCategoria.
     const candidates = (STATE.data?.Resultados_Grupos || []).filter(r =>
         normalizeID(r.IDEvento) === STATE.selectedEventId &&
         normalizeID(r.IDJuez) === STATE.selectedJudgeId &&
-        parseInt(r.PuestoGrupo) === 1 &&
+        parseInt(r.PuestoGrupo, 10) === 1 &&
         !isTruthy(r.Ausente)
     );
 
     if (candidates.length === 0) {
-        container.innerHTML = `<div class="empty-state">No hay candidatos para BIS (ganadores de grupo de este juez) cargados.</div>`;
+        container.innerHTML = `<div class="empty-state">No hay candidatos para BIS cargados todavía.</div>`;
         return;
     }
 
-    // 2. SANITIZATION: Existing BIS results for this judge (unique by dog)
-    const bisMap = new Map();
-    (STATE.data?.Resultados_BIS || []).forEach(r => {
-        if (normalizeID(r.IDEvento) === STATE.selectedEventId &&
-            normalizeID(r.IDJuez) === STATE.selectedJudgeId) {
-            bisMap.set(normalizeID(r.IDInscripcion), r);
-        }
-    });
+    const categories = [
+        "CACHORROS ESPECIALES",
+        "CACHORROS",
+        "JOVENES",
+        "ADULTOS",
+        "VETERANOS"
+    ];
 
-    const categories = ["Cachorros Especiales", "Cachorros", "Jóvenes", "Abierta / Adultos"];
     const tree = {};
+    categories.forEach(c => tree[c] = []);
+
     const resRazas = STATE.data?.Resultados_Razas || [];
 
+    // 2. Mapa de resultados BIS existentes.
+    // Clave correcta: perro + categoría BIS.
+    // Esto evita mezclar un mismo perro que pueda competir como JOVENES y ADULTOS.
+    const bisMap = new Map();
+
+    (STATE.data?.Resultados_BIS || []).forEach(r => {
+        if (
+            normalizeID(r.IDEvento) !== STATE.selectedEventId ||
+            normalizeID(r.IDJuez) !== STATE.selectedJudgeId
+        ) {
+            return;
+        }
+
+        const dog = byId(STATE.data?.Catalogo_Perros_Inscriptos, 'IDInscripcion', r.IDInscripcion);
+
+        const finalKey =
+            normalizeFinalGrupoCategoria(r.FinalGrupoCategoria) ||
+            normalizeTipoBisToFinalKey(r.TipoBIS) ||
+            getFinalGrupoFromDogFallback(dog?.IDCategoria);
+
+        if (!finalKey) return;
+
+        const mapKey = `${normalizeID(r.IDInscripcion)}__${finalKey}`;
+        bisMap.set(mapKey, r);
+    });
+
+    // 3. Armar candidatos por categoría BIS real.
     candidates.forEach(cand => {
         const dog = byId(STATE.data?.Catalogo_Perros_Inscriptos, 'IDInscripcion', cand.IDInscripcion);
         if (!dog) return;
 
-        const sCat = getSuperCat(dog.IDCategoria);
-        const rz = byId(STATE.data?.Catalogo_Razas, 'IDRaza', dog.IDRaza)?.NombreRaza || "Raza desconocida";
-        const res = bisMap.get(normalizeID(dog.IDInscripcion));
+        const finalKey =
+            normalizeFinalGrupoCategoria(cand.FinalGrupoCategoria) ||
+            getFinalGrupoFromDogFallback(dog.IDCategoria);
 
-        if (!tree[sCat]) tree[sCat] = [];
-        tree[sCat].push({ dog, res, rz, grupo: normalizeGrupo(dog.IDGrupo) });
+        if (!finalKey) return;
+
+        const rz = byId(STATE.data?.Catalogo_Razas, 'IDRaza', dog.IDRaza)?.NombreRaza || "Raza desconocida";
+        const grupo = normalizeGrupo(cand.IDGrupo || dog.IDGrupo);
+        const res = bisMap.get(`${normalizeID(dog.IDInscripcion)}__${finalKey}`);
+
+        if (!tree[finalKey]) tree[finalKey] = [];
+
+        tree[finalKey].push({
+            dog,
+            res,
+            rz,
+            grupo,
+            finalKey,
+            finalLabel: getFinalGrupoLabel(finalKey)
+        });
     });
 
     let html = `<div class="finales-categorias-grid">`;
-    categories.forEach(sc => {
-        const catItems = tree[sc] || [];
+
+    categories.forEach(finalKey => {
+        const catItems = tree[finalKey] || [];
+        const finalLabel = getFinalGrupoLabel(finalKey);
+
         html += `
             <div class="finales-categoria-card">
-                <div class="category-title">${sc}</div>
+                <div class="category-title">${esc(finalLabel)}</div>
                 <div class="category-results">
         `;
 
@@ -1171,7 +1455,7 @@ function renderResultadosBis() {
             catItems.sort((a, b) => {
                 if (isTruthy(a.res?.Ausente)) return 100;
                 if (isTruthy(b.res?.Ausente)) return -100;
-                return (parseInt(a.res?.PuestoBIS) || 99) - (parseInt(b.res?.PuestoBIS) || 99);
+                return (parseInt(a.res?.PuestoBIS, 10) || 99) - (parseInt(b.res?.PuestoBIS, 10) || 99);
             }).forEach(item => {
                 const isAus = isTruthy(item.res?.Ausente);
                 const p = item.res?.PuestoBIS || "";
@@ -1179,13 +1463,18 @@ function renderResultadosBis() {
                 const rRaza = resRazas.find(rr =>
                     normalizeID(rr.IDInscripcion) === normalizeID(item.dog.IDInscripcion) &&
                     normalizeID(rr.IDEvento) === STATE.selectedEventId &&
+                    normalizeID(rr.IDJuez) === STATE.selectedJudgeId &&
+                    splitMultiPublic(rr.FinalGrupoCategorias).includes(item.finalKey)
+                ) || resRazas.find(rr =>
+                    normalizeID(rr.IDInscripcion) === normalizeID(item.dog.IDInscripcion) &&
+                    normalizeID(rr.IDEvento) === STATE.selectedEventId &&
                     normalizeID(rr.IDJuez) === STATE.selectedJudgeId
                 );
 
                 const juezObj = byId(STATE.data?.Jueces, 'IDJuez', STATE.selectedJudgeId);
-                const esLimitada = isJudgeLimitada(juezObj) || rRaza?.TipoCompetencia === "LIMITADA";
+                const esLimitadaItem = isJudgeLimitada(juezObj) || rRaza?.TipoCompetencia === "LIMITADA";
 
-                const tituloGanado = esLimitada ? "" : (
+                const tituloGanado = esLimitadaItem ? "" : (
                     rRaza?.Titulo_Ganado ||
                     rRaza?.Titulo ||
                     rRaza?.TituloGanado ||
@@ -1198,22 +1487,26 @@ function renderResultadosBis() {
                         <div class="result-body mini">
                             <div class="result-item mini">
                                 <div class="result-info" style="width: 100%;">
-                                    <div class="dog-title mini">${item.grupo} — #${item.dog.NumeroCatalogo}</div>
-                                    <div class="dog-subtitle">${item.rz}</div>
-                                    <div class="dog-meta mini">Cat. Orig: ${item.dog.IDCategoria} | ${item.dog.Observaciones || ''}</div>
-                                    ${tituloGanado ? `
-                                    <div class="public-title-row">
-                                        <span class="public-title-label">Título:</span>
-                                        <span class="public-title-badge">${tituloGanado}</span>
+                                    <div class="dog-title mini">${esc(item.grupo)} — #${esc(item.dog.NumeroCatalogo)}</div>
+                                    <div class="dog-subtitle">${esc(item.rz)}</div>
+
+                                    <div class="dog-meta mini">
+                                        <strong>Identificación:</strong> ${esc(item.dog.Observaciones || 'Sin datos')}
                                     </div>
+
+                                    ${tituloGanado ? `
+                                        <div class="public-title-row">
+                                            <span class="public-title-label">Título:</span>
+                                            ${splitMultiPublic(tituloGanado).map(t => `
+                                                <span class="public-title-badge">${esc(t)}</span>
+                                            `).join("")}
+                                        </div>
                                     ` : ""}
-                                    <div class="public-indicators">
-                                        <div class="public-indicator-btn btn-aus ${isAus ? 'active' : ''}">AUS</div>
-                                        ${["1", "2", "3", "4", "5", "6", "7"].map(pst => `
-                                            <div class="public-indicator-btn btn-${pst} ${String(p) === pst && !isAus ? 'active' : ''}">
-                                                ${pst}º
-                                            </div>
-                                        `).join("")}
+
+                                    <div class="public-clean-summary">
+                                        ${isAus ? `<span class="public-status-badge badge-ausente">AUSENTE</span>` : ""}
+                                        ${p ? `<span class="public-status-badge badge-puesto">${esc(p)}° Puesto BIS</span>` : ""}
+                                        <span class="public-group-pass-badge">${esc(finalLabel)}</span>
                                     </div>
                                 </div>
                             </div>
@@ -1222,11 +1515,15 @@ function renderResultadosBis() {
                 `;
             });
         }
+
         html += `</div></div>`;
     });
+
     html += `</div>`;
     container.innerHTML = html;
 }
+
+
 
 function renderSelectedResults() {
     const containers = {
